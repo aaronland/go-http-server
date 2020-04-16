@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 const MKCERT string = "mkcert"
@@ -88,8 +89,11 @@ func mkCert(u *url.URL, root string) (string, string, error) {
 		return "", "", err
 	}
 
-	cert_fname := fmt.Sprint("%s-cert.pem", u.Host)
-	key_fname := fmt.Sprint("%s-key.pem", u.Host)
+	parts := strings.Split(u.Host, ":")
+	host := parts[0]
+
+	cert_fname := fmt.Sprintf("%s-cert.pem", host)
+	key_fname := fmt.Sprintf("%s-key.pem", host)
 
 	cert_path := filepath.Join(root, cert_fname)
 	key_path := filepath.Join(root, key_fname)
@@ -99,13 +103,14 @@ func mkCert(u *url.URL, root string) (string, string, error) {
 		cert_path,
 		"-key-file",
 		key_path,
+		host,
 	}
 
 	cmd := exec.Command(MKCERT, args...)
 	err = cmd.Run()
 
 	if err != nil {
-		return "", "", nil
+		return "", "", err
 	}
 
 	return cert_path, key_path, nil
