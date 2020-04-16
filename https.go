@@ -71,5 +71,5 @@ func (s *TLSServer) Address() string {
 }
 
 func (s *TLSServer) ListenAndServe(ctx context.Context, mux *http.ServeMux) error {
-	return http.ListenAndServeTLS(s.url.Host, s.cert, s.key, nil)
+	return http.ListenAndServeTLS(s.url.Host, s.cert, s.key, mux)
 }
