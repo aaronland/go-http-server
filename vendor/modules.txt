@@ -1,3 +1,5 @@
+# github.com/aaronland/go-roster v0.0.1
+github.com/aaronland/go-roster
 # github.com/aws/aws-lambda-go v1.10.0
 github.com/aws/aws-lambda-go/events
 github.com/aws/aws-lambda-go/lambda

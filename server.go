@@ -1,40 +1,71 @@
 package server
 
 import (
-	"errors"
+	"context"
+	"github.com/aaronland/go-roster"
 	_ "log"
 	"net/http"
 	"net/url"
-	"strings"
 )
 
 type Server interface {
-	ListenAndServe(*http.ServeMux) error
+	ListenAndServe(context.Context, *http.ServeMux) error
 	Address() string
 }
 
-func NewStaticServer(proto string, u *url.URL, args ...interface{}) (Server, error) {
+type ServerInitializeFunc func(context.Context, string) (Server, error)
 
-	var svr Server
-	var err error
+var servers roster.Roster
 
-	switch strings.ToUpper(proto) {
+func ensureServers() error {
 
-	case "HTTP":
+	if servers == nil {
 
-		svr, err = NewHTTPServer(u, args...)
+		r, err := roster.NewDefaultRoster()
 
-	case "LAMBDA":
+		if err != nil {
+			return err
+		}
 
-		svr, err = NewLambdaServer(u, args...)
-
-	default:
-		return nil, errors.New("Invalid server protocol")
+		servers = r
 	}
+
+	return nil
+}
+
+func RegisterServer(ctx context.Context, scheme string, f ServerInitializeFunc) error {
+
+	err := ensureServers()
+
+	if err != nil {
+		return err
+	}
+
+	return servers.Register(ctx, scheme, f)
+}
+
+func NewServer(ctx context.Context, uri string) (Server, error) {
+
+	err := ensureServers()
 
 	if err != nil {
 		return nil, err
 	}
 
-	return svr, nil
+	u, err := url.Parse(uri)
+
+	if err != nil {
+		return nil, err
+	}
+
+	scheme := u.Scheme
+
+	i, err := servers.Driver(ctx, scheme)
+
+	if err != nil {
+		return nil, err
+	}
+
+	f := i.(ServerInitializeFunc)
+	return f(ctx, uri)
 }
