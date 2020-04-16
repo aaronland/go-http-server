@@ -6,6 +6,7 @@ import (
 	_ "log"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 type Server interface {
@@ -68,4 +69,14 @@ func NewServer(ctx context.Context, uri string) (Server, error) {
 
 	f := i.(ServerInitializeFunc)
 	return f(ctx, uri)
+}
+
+func Schemes() []string {
+	ctx := context.Background()
+	return servers.Drivers(ctx)
+}
+
+func SchemesAsString() string {
+	schemes := Schemes()
+	return strings.Join(schemes, ",")
 }
