@@ -6,7 +6,7 @@ package server
 import (
 	"context"
 	"fmt"
-	"log"
+	_ "log"
 	"net/http"
 	"net/url"
 	"os"
@@ -71,9 +71,5 @@ func (s *TLSServer) Address() string {
 }
 
 func (s *TLSServer) ListenAndServe(ctx context.Context, mux *http.ServeMux) error {
-
-	log.Println("LISTEN", s.url.Host)
-	log.Println("LISTEN", s.Address())
-
 	return http.ListenAndServeTLS(s.url.Host, s.cert, s.key, nil)
 }
