@@ -1,21 +1,51 @@
 # go-http-server
 
-## Interfaces
-
-### Server
-
-```
-type Server interface {
-	ListenAndServe(context.Context, *http.ServeMux) error
-	Address() string
-}
-
-type ServerInitializeFunc func(context.Context, string) (Server, error)
-```
-
 ## Example
 
 _Error hanldling has been removed for the sake of brevity._
+
+### Using a server
+
+```
+package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"github.com/aaronland/go-http-server"
+	"net/http"
+)
+
+func NewHandler() http.Handler {
+
+	fn := func(rsp http.ResponseWriter, req *http.Request) {
+		msg := fmt.Sprintf("Hello, %s", req.Host)
+		rsp.Write([]byte(msg))
+	}
+
+	h := http.HandlerFunc(fn)
+	return h
+}
+
+func main() {
+
+	server_uri := flag.String("server-uri", "http://localhost:8080", "...")
+
+	flag.Parse()
+
+	ctx := context.Background()
+
+	s, _ := server.NewServer(ctx, *server_uri)
+
+	mux := http.NewServeMux()
+	mux.Handle("/", NewHandler())
+
+	log.Printf("Listening on %s", s.Address())
+	s.ListenAndServe(ctx, mux)
+}
+
+```
 
 ### Writing a server
 
@@ -60,50 +90,17 @@ func (s *HTTPServer) ListenAndServe(ctx context.Context, mux *http.ServeMux) err
 }
 ```
 
-### Using a server
+## Interfaces
+
+### Server
 
 ```
-package main
-
-import (
-	"context"
-	"flag"
-	"fmt"
-	"github.com/aaronland/go-http-server"
-	"net/http"
-)
-
-func NewHandler() http.Handler {
-
-	fn := func(rsp http.ResponseWriter, req *http.Request) {
-		msg := fmt.Sprintf("Hello, %s", req.Host)
-		rsp.Write([]byte(msg))
-	}
-
-	h := http.HandlerFunc(fn)
-	return h
+type Server interface {
+	ListenAndServe(context.Context, *http.ServeMux) error
+	Address() string
 }
 
-func main() {
-
-	server_uri := flag.String("server-uri", "http://localhost:8080", "...")
-
-	flag.Parse()
-
-	ctx := context.Background()
-
-	s, _ := server.NewServer(ctx, *server_uri)
-
-	mux := http.NewServeMux()
-	handler := NewHandler()
-
-	mux.Handle("/", handler)
-
-	log.Printf("Listening on %s", s.Address())
-
-	s.ListenAndServe(ctx, mux)
-}
-
+type ServerInitializeFunc func(context.Context, string) (Server, error)
 ```
 
 ## Server schemes
