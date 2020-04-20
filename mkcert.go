@@ -6,7 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	_ "log"
+	"log"
 	"net/url"
 	"os"
 	"os/exec"
@@ -117,6 +117,13 @@ func mkCert(u *url.URL, root string) (string, string, error) {
 }
 
 func mkCertInstall() error {
+
+	// unfortunately there is no way from the CLI tool to check whether
+	// mkcert is installed and some of the built-in methods for testing
+	// state (in mkcert.go) are marked as private so there's no way to
+	// access them... (20200420/thisisaaronland)
+
+	log.Println("Checking whether mkcert is installed. If it is not you may be prompted for your password (in order to install certificate files")
 
 	cmd := exec.Command(MKCERT, "-install")
 	return cmd.Run()
