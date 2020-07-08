@@ -9,9 +9,11 @@ package server
 
 import (
 	"context"
+	"errors"
 	_ "log"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"time"
 )
@@ -25,6 +27,8 @@ type HTTPServer struct {
 	Server
 	url         *url.URL
 	http_server *http.Server
+	cert        string
+	key         string
 }
 
 func NewHTTPServer(ctx context.Context, uri string) (Server, error) {
@@ -37,9 +41,9 @@ func NewHTTPServer(ctx context.Context, uri string) (Server, error) {
 
 	u.Scheme = "http"
 
-	read_timeout := 1 * time.Second
-	write_timeout := 1 * time.Second
-	idle_timeout := 30 * time.Second
+	read_timeout := 2 * time.Second
+	write_timeout := 10 * time.Second
+	idle_timeout := 15 * time.Second
 	header_timeout := 2 * time.Second
 
 	q := u.Query()
@@ -88,8 +92,35 @@ func NewHTTPServer(ctx context.Context, uri string) (Server, error) {
 		header_timeout = time.Duration(to) * time.Second
 	}
 
+	tls_cert := q.Get("cert")
+	tls_key := q.Get("key")
+
+	if (tls_cert != "") && (tls_key != "") {
+
+		_, err = os.Stat(tls_cert)
+
+		if err != nil {
+			return nil, err
+		}
+
+		_, err = os.Stat(tls_key)
+
+		if err != nil {
+			return nil, err
+		}
+
+		u.Scheme = "https"
+
+	} else if (tls_cert != "") && (tls_key == "") {
+		return nil, errors.New("Missing TLS key parameter")
+	} else if (tls_key != "") && (tls_key == "") {
+		return nil, errors.New("Missing TLS cert parameter")
+	} else {
+		// pass
+	}
+
 	srv := &http.Server{
-		Addr:              u.String(),
+		Addr:              u.Host,
 		ReadTimeout:       read_timeout,
 		WriteTimeout:      write_timeout,
 		IdleTimeout:       idle_timeout,
@@ -99,6 +130,8 @@ func NewHTTPServer(ctx context.Context, uri string) (Server, error) {
 	server := HTTPServer{
 		url:         u,
 		http_server: srv,
+		cert:        tls_cert,
+		key:         tls_key,
 	}
 
 	return &server, nil
@@ -109,6 +142,12 @@ func (s *HTTPServer) Address() string {
 }
 
 func (s *HTTPServer) ListenAndServe(ctx context.Context, mux *http.ServeMux) error {
-	return s.ListenAndServe(ctx, mux)
-	// return http.ListenAndServe(s.url.Host, mux)
+
+	s.http_server.Handler = mux
+
+	if s.cert != "" && s.key != "" {
+		return s.http_server.ListenAndServeTLS(s.cert, s.key)
+	} else {
+		return s.http_server.ListenAndServe()
+	}
 }
