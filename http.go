@@ -10,10 +10,11 @@ package server
 import (
 	"context"
 	"errors"
-	_ "log"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"strconv"
 	"time"
 )
@@ -143,11 +144,39 @@ func (s *HTTPServer) Address() string {
 
 func (s *HTTPServer) ListenAndServe(ctx context.Context, mux *http.ServeMux) error {
 
+	idleConnsClosed := make(chan struct{})
+	
+	go func() {
+		
+		sigint := make(chan os.Signal, 1)
+		signal.Notify(sigint, os.Interrupt)
+		<-sigint
+
+		// We received an interrupt signal, shut down.
+		
+		err := s.http_server.Shutdown(context.Background())
+
+		if err != nil {
+			log.Printf("HTTP server shutdown error: %v", err)
+		}
+		
+		close(idleConnsClosed)
+	}()
+	
 	s.http_server.Handler = mux
 
+	var err error
+	
 	if s.cert != "" && s.key != "" {
-		return s.http_server.ListenAndServeTLS(s.cert, s.key)
+		err = s.http_server.ListenAndServeTLS(s.cert, s.key)		
 	} else {
-		return s.http_server.ListenAndServe()
+		err = s.http_server.ListenAndServe()
 	}
+
+	if err != nil && err != http.ErrServerClosed {
+		return err
+	}
+
+	<-idleConnsClosed
+	return nil
 }
