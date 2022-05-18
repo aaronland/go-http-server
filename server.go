@@ -7,6 +7,7 @@ import (
 	_ "log"
 	"net/http"
 	"net/url"
+	"sort"
 )
 
 // type Server is an interface for creating server instances that serve requests using a `http.Handler` router.
@@ -89,5 +90,6 @@ func Schemes() []string {
 		schemes[idx] = fmt.Sprintf("%s://", dr)
 	}
 
+	sort.Strings(schemes)
 	return schemes
 }
