@@ -23,9 +23,20 @@ func TestRouteHandler(t *testing.T) {
 
 		return http.HandlerFunc(fn), nil
 	}
-	
+
+	bar_func := func() (http.Handler, error) {
+
+		fn := func(rsp http.ResponseWriter, req *http.Request) {
+			rsp.Write([]byte(`bar`))
+			return
+		}
+
+		return http.HandlerFunc(fn), nil
+	}
+
 	handlers := map[string]RouteHandlerFunc{
-		"^/foo": foo_func,
+		"/foo":     foo_func,
+		"/foo/bar": bar_func,
 	}
 
 	route_handler, err := RouteHandler(handlers)
@@ -50,7 +61,7 @@ func TestRouteHandler(t *testing.T) {
 	tests := map[string]string{
 		"http://localhost:8080/foo":     "foo",
 		"http://localhost:8080/foo/":    "foo",
-		"http://localhost:8080/foo/bar": "foo",
+		"http://localhost:8080/foo/bar": "bar",
 	}
 
 	for uri, expected := range tests {
