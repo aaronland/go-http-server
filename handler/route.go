@@ -9,11 +9,12 @@ import (
 	"sync"
 )
 
+// RouteHandlerFunc returns an `http.Handler` instance.
 type RouteHandlerFunc func() (http.Handler, error)
 
 type RouteHandlerOptions struct {
 	Handlers map[string]RouteHandlerFunc
-	Patterns []string
+	patterns []string
 	Matches  *sync.Map
 	Logger   *log.Logger
 }
@@ -26,13 +27,6 @@ func RouteHandler(handlers map[string]RouteHandlerFunc) (http.Handler, error) {
 	for p, _ := range handlers {
 		patterns = append(patterns, p)
 	}
-
-	// Sort longest to shortest
-	// https://cs.opensource.google/go/go/+/refs/tags/go1.20.4:src/net/http/server.go;l=2533
-
-	sort.Slice(patterns, func(i, j int) bool {
-		return len(patterns[i]) > len(patterns[j])
-	})
 
 	logger := log.Default()
 
@@ -47,6 +41,13 @@ func RouteHandler(handlers map[string]RouteHandlerFunc) (http.Handler, error) {
 }
 
 func RouteHandlerWithOptions(opts *RouteHandlerOptions) (http.Handler, error) {
+
+	// Sort longest to shortest
+	// https://cs.opensource.google/go/go/+/refs/tags/go1.20.4:src/net/http/server.go;l=2533
+
+	sort.Slice(opts.Patterns, func(i, j int) bool {
+		return len(opts.Patterns[i]) > len(opts.Patterns[j])
+	})
 
 	fn := func(rsp http.ResponseWriter, req *http.Request) {
 
