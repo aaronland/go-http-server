@@ -4,9 +4,10 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"github.com/aaronland/go-http-server"
 	"log"
 	"net/http"
+
+	"github.com/aaronland/go-http-server"
 )
 
 func NewHandler() http.Handler {

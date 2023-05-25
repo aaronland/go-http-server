@@ -2,8 +2,8 @@ package handler
 
 import (
 	"fmt"
-	"log"
 	"io"
+	"log"
 	"net/http"
 	"sort"
 	"strings"
@@ -20,7 +20,7 @@ type RouteHandlerOptions struct {
 	// are functions that when invoked return `http.Handler` instances.
 	Handlers map[string]RouteHandlerFunc
 	// Logger is a `log.Logger` instance used for feedback and error-reporting.
-	Logger   *log.Logger
+	Logger *log.Logger
 }
 
 // RouteHandler create a new `http.Handler` instance that will serve requests using handlers defined in 'handlers'
@@ -32,7 +32,7 @@ func RouteHandler(handlers map[string]RouteHandlerFunc) (http.Handler, error) {
 
 	opts := &RouteHandlerOptions{
 		Handlers: handlers,
-		Logger: logger,
+		Logger:   logger,
 	}
 
 	return RouteHandlerWithOptions(opts)
@@ -42,16 +42,16 @@ func RouteHandler(handlers map[string]RouteHandlerFunc) (http.Handler, error) {
 // in 'opts.Handlers'. This is essentially a "middleware" handler than does all the same routing that the default
 // `http.ServeMux` handler does but defers initiating the handlers being routed to until they invoked at runtime.
 // Only one handler is initialized (or retrieved from an in-memory cache) and served for any given path being by
-// a `RouteHandler` request. 
+// a `RouteHandler` request.
 //
 // The reason this handler exists is for web applications that:
 //
-// 1. Are deployed as AWS Lambda functions (with an API Gateway integration) using the "lambda://" `server.Server`
-//    implementation that have more handlers than you need or want to initiate, but never use, for every request.
-// 2. You don't want to refactor in to (n) atomic Lambda functions. That is you want to be able to re-use the same
-//    code in both a plain-vanilla HTTP server configuration as well as Lambda + API Gateway configuration.
+//  1. Are deployed as AWS Lambda functions (with an API Gateway integration) using the "lambda://" `server.Server`
+//     implementation that have more handlers than you need or want to initiate, but never use, for every request.
+//  2. You don't want to refactor in to (n) atomic Lambda functions. That is you want to be able to re-use the same
+//     code in both a plain-vanilla HTTP server configuration as well as Lambda + API Gateway configuration.
 func RouteHandlerWithOptions(opts *RouteHandlerOptions) (http.Handler, error) {
-	
+
 	matches := new(sync.Map)
 	patterns := make([]string, 0)
 
