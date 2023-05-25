@@ -3,6 +3,7 @@ package handler
 import (
 	"fmt"
 	"log"
+	"io"
 	"net/http"
 	"sort"
 	"strings"
@@ -12,41 +13,57 @@ import (
 // RouteHandlerFunc returns an `http.Handler` instance.
 type RouteHandlerFunc func() (http.Handler, error)
 
+// RouteHandlerOptions is a struct that contains configuration settings
+// for use the RouteHandlerWithOptions method.
 type RouteHandlerOptions struct {
+	// Handlers is a map whose keys are `http.ServeMux` style routing patterns and whose keys
+	// are functions that when invoked return `http.Handler` instances.
 	Handlers map[string]RouteHandlerFunc
-	patterns []string
-	Matches  *sync.Map
+	// Logger is a `log.Logger` instance used for feedback and error-reporting.
 	Logger   *log.Logger
 }
 
+// RouteHandler create a new `http.Handler` instance that will serve requests using handlers defined in 'handlers'
+// with a `log.Logger` instance that discards all writes. Under the hood this is invoking the `RouteHandlerWithOptions`
+// method.
 func RouteHandler(handlers map[string]RouteHandlerFunc) (http.Handler, error) {
 
-	matches := new(sync.Map)
-	patterns := make([]string, 0)
-
-	for p, _ := range handlers {
-		patterns = append(patterns, p)
-	}
-
-	logger := log.Default()
+	logger := log.New(io.Discard, "", 0)
 
 	opts := &RouteHandlerOptions{
-		Matches:  matches,
-		Patterns: patterns,
 		Handlers: handlers,
-		Logger:   logger,
+		Logger: logger,
 	}
 
 	return RouteHandlerWithOptions(opts)
 }
 
+// RouteHandlerWithOptions create a new `http.Handler` instance that will serve requests using handlers defined
+// in 'opts.Handlers'. This is essentially a "middleware" handler than does all the same routing that the default
+// `http.ServeMux` handler does but defers initiating the handlers being routed to until they invoked at runtime.
+// Only one handler is initialized (or retrieved from an in-memory cache) and served for any given path being by
+// a `RouteHandler` request. 
+//
+// The reason this handler exists is for web applications that:
+//
+// 1. Are deployed as AWS Lambda functions (with an API Gateway integration) using the "lambda://" `server.Server`
+//    implementation that have more handlers than you need or want to initiate, but never use, for every request.
+// 2. You don't want to refactor in to (n) atomic Lambda functions. That is you want to be able to re-use the same
+//    code in both a plain-vanilla HTTP server configuration as well as Lambda + API Gateway configuration.
 func RouteHandlerWithOptions(opts *RouteHandlerOptions) (http.Handler, error) {
+	
+	matches := new(sync.Map)
+	patterns := make([]string, 0)
+
+	for p, _ := range opts.Handlers {
+		patterns = append(patterns, p)
+	}
 
 	// Sort longest to shortest
 	// https://cs.opensource.google/go/go/+/refs/tags/go1.20.4:src/net/http/server.go;l=2533
 
-	sort.Slice(opts.Patterns, func(i, j int) bool {
-		return len(opts.Patterns[i]) > len(opts.Patterns[j])
+	sort.Slice(patterns, func(i, j int) bool {
+		return len(patterns[i]) > len(patterns[j])
 	})
 
 	fn := func(rsp http.ResponseWriter, req *http.Request) {
@@ -55,13 +72,13 @@ func RouteHandlerWithOptions(opts *RouteHandlerOptions) (http.Handler, error) {
 
 		path := req.URL.Path
 
-		v, ok := opts.Matches.Load(path)
+		v, ok := matches.Load(path)
 
 		if ok {
 			handler = v.(http.Handler)
 		} else {
 
-			h, err := deriveHandler(opts, path)
+			h, err := deriveHandler(opts.Handlers, patterns, path)
 
 			if err != nil {
 				opts.Logger.Printf("%v", err)
@@ -77,7 +94,7 @@ func RouteHandlerWithOptions(opts *RouteHandlerOptions) (http.Handler, error) {
 			}
 
 			handler = h
-			opts.Matches.Store(path, handler)
+			matches.Store(path, handler)
 		}
 
 		handler.ServeHTTP(rsp, req)
@@ -87,7 +104,7 @@ func RouteHandlerWithOptions(opts *RouteHandlerOptions) (http.Handler, error) {
 	return http.HandlerFunc(fn), nil
 }
 
-func deriveHandler(opts *RouteHandlerOptions, path string) (http.Handler, error) {
+func deriveHandler(handlers map[string]RouteHandlerFunc, patterns []string, path string) (http.Handler, error) {
 
 	// Basically do what the default http.ServeMux does but inflate the
 	// handler (func) on demand at run-time. Handler is cached above.
@@ -95,7 +112,7 @@ func deriveHandler(opts *RouteHandlerOptions, path string) (http.Handler, error)
 
 	var matching_pattern string
 
-	for _, p := range opts.Patterns {
+	for _, p := range patterns {
 		if strings.HasPrefix(path, p) {
 			matching_pattern = p
 			break
@@ -106,7 +123,7 @@ func deriveHandler(opts *RouteHandlerOptions, path string) (http.Handler, error)
 		return nil, nil
 	}
 
-	handler_func, ok := opts.Handlers[matching_pattern]
+	handler_func, ok := handlers[matching_pattern]
 
 	if !ok {
 		return nil, nil
