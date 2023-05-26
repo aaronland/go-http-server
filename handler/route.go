@@ -68,33 +68,21 @@ func RouteHandlerWithOptions(opts *RouteHandlerOptions) (http.Handler, error) {
 
 	fn := func(rsp http.ResponseWriter, req *http.Request) {
 
-		var handler http.Handler
-
 		path := req.URL.Path
 
-		v, ok := matches.Load(path)
+		handler, err := deriveHandler(opts.Handlers, matches, patterns, path)
 
-		if ok {
-			handler = v.(http.Handler)
-		} else {
+		if err != nil {
+			opts.Logger.Printf("%v", err)
+			http.Error(rsp, "Internal server error", http.StatusInternalServerError)
+			return
+		}
 
-			h, err := deriveHandler(opts.Handlers, patterns, path)
+		// Don't fill up the matches cache with 404 handlers
 
-			if err != nil {
-				opts.Logger.Printf("%v", err)
-				http.Error(rsp, "Internal server error", http.StatusInternalServerError)
-				return
-			}
-
-			// Don't fill up the matches cache with 404 handlers
-
-			if h == nil {
-				http.Error(rsp, "Not found", http.StatusNotFound)
-				return
-			}
-
-			handler = h
-			matches.Store(path, handler)
+		if handler == nil {
+			http.Error(rsp, "Not found", http.StatusNotFound)
+			return
 		}
 
 		handler.ServeHTTP(rsp, req)
@@ -104,7 +92,7 @@ func RouteHandlerWithOptions(opts *RouteHandlerOptions) (http.Handler, error) {
 	return http.HandlerFunc(fn), nil
 }
 
-func deriveHandler(handlers map[string]RouteHandlerFunc, patterns []string, path string) (http.Handler, error) {
+func deriveHandler(handlers map[string]RouteHandlerFunc, matches *sync.Map, patterns []string, path string) (http.Handler, error) {
 
 	// Basically do what the default http.ServeMux does but inflate the
 	// handler (func) on demand at run-time. Handler is cached above.
@@ -123,16 +111,28 @@ func deriveHandler(handlers map[string]RouteHandlerFunc, patterns []string, path
 		return nil, nil
 	}
 
-	handler_func, ok := handlers[matching_pattern]
+	var handler http.Handler
 
-	if !ok {
-		return nil, nil
-	}
+	v, exists := matches.Load(matching_pattern)
 
-	handler, err := handler_func()
+	if exists {
+		handler = v.(http.Handler)
+	} else {
 
-	if err != nil {
-		return nil, fmt.Errorf("Failed to instantiate handler func for '%s' matching '%s', %v", path, matching_pattern, err)
+		handler_func, ok := handlers[matching_pattern]
+
+		if !ok {
+			return nil, nil
+		}
+
+		h, err := handler_func()
+
+		if err != nil {
+			return nil, fmt.Errorf("Failed to instantiate handler func for '%s' matching '%s', %v", path, matching_pattern, err)
+		}
+
+		handler = h
+		matches.Store(matching_pattern, handler)
 	}
 
 	return handler, nil
