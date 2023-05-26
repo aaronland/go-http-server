@@ -78,8 +78,6 @@ func RouteHandlerWithOptions(opts *RouteHandlerOptions) (http.Handler, error) {
 			return
 		}
 
-		// Don't fill up the matches cache with 404 handlers
-
 		if handler == nil {
 			http.Error(rsp, "Not found", http.StatusNotFound)
 			return
@@ -121,6 +119,8 @@ func deriveHandler(handlers map[string]RouteHandlerFunc, matches *sync.Map, patt
 
 		handler_func, ok := handlers[matching_pattern]
 
+		// Don't fill up the matches cache with 404 handlers
+		
 		if !ok {
 			return nil, nil
 		}
