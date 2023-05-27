@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -11,7 +12,7 @@ import (
 )
 
 // RouteHandlerFunc returns an `http.Handler` instance.
-type RouteHandlerFunc func() (http.Handler, error)
+type RouteHandlerFunc func(context.Context) (http.Handler, error)
 
 // RouteHandlerOptions is a struct that contains configuration settings
 // for use the RouteHandlerWithOptions method.
@@ -68,9 +69,7 @@ func RouteHandlerWithOptions(opts *RouteHandlerOptions) (http.Handler, error) {
 
 	fn := func(rsp http.ResponseWriter, req *http.Request) {
 
-		path := req.URL.Path
-
-		handler, err := deriveHandler(opts.Handlers, matches, patterns, path)
+		handler, err := deriveHandler(req, opts.Handlers, matches, patterns)
 
 		if err != nil {
 			opts.Logger.Printf("%v", err)
@@ -90,7 +89,10 @@ func RouteHandlerWithOptions(opts *RouteHandlerOptions) (http.Handler, error) {
 	return http.HandlerFunc(fn), nil
 }
 
-func deriveHandler(handlers map[string]RouteHandlerFunc, matches *sync.Map, patterns []string, path string) (http.Handler, error) {
+func deriveHandler(req *http.Request, handlers map[string]RouteHandlerFunc, matches *sync.Map, patterns []string) (http.Handler, error) {
+
+	ctx := req.Context()
+	path := req.URL.Path
 
 	// Basically do what the default http.ServeMux does but inflate the
 	// handler (func) on demand at run-time. Handler is cached above.
@@ -120,12 +122,12 @@ func deriveHandler(handlers map[string]RouteHandlerFunc, matches *sync.Map, patt
 		handler_func, ok := handlers[matching_pattern]
 
 		// Don't fill up the matches cache with 404 handlers
-		
+
 		if !ok {
 			return nil, nil
 		}
 
-		h, err := handler_func()
+		h, err := handler_func(ctx)
 
 		if err != nil {
 			return nil, fmt.Errorf("Failed to instantiate handler func for '%s' matching '%s', %v", path, matching_pattern, err)

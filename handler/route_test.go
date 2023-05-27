@@ -14,7 +14,7 @@ func TestRouteHandler(t *testing.T) {
 
 	ctx := context.Background()
 
-	foo_func := func() (http.Handler, error) {
+	foo_func := func(ctx context.Context) (http.Handler, error) {
 
 		fn := func(rsp http.ResponseWriter, req *http.Request) {
 			rsp.Write([]byte(`foo`))
@@ -24,7 +24,7 @@ func TestRouteHandler(t *testing.T) {
 		return http.HandlerFunc(fn), nil
 	}
 
-	bar_func := func() (http.Handler, error) {
+	bar_func := func(ctx context.Context) (http.Handler, error) {
 
 		fn := func(rsp http.ResponseWriter, req *http.Request) {
 			rsp.Write([]byte(`bar`))
