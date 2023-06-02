@@ -7,4 +7,7 @@ require (
 	github.com/akrylysov/algnhsa v1.0.0
 )
 
-require github.com/aws/aws-lambda-go v1.37.0
+require (
+	github.com/aws/aws-lambda-go v1.37.0
+	github.com/sfomuseum/go-flags v0.10.0
+)

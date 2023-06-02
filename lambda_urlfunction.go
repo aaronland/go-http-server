@@ -37,7 +37,7 @@ func NewLambdaURLFunctionServer(ctx context.Context, uri string) (Server, error)
 
 // Address returns the fully-qualified URL used to instantiate 's'.
 func (s *LambdaURLFunctionServer) Address() string {
-	return ""
+	return "urlfunction://"
 }
 
 // ListenAndServe starts the serve and listens for requests using 'mux' for routing.
@@ -72,36 +72,24 @@ func newHTTPRequest(ctx context.Context, event events.LambdaFunctionURLRequest) 
 	rawQuery := event.RawQueryString
 
 	if len(rawQuery) == 0 {
+		
 		params := url.Values{}
+		
 		for k, v := range event.QueryStringParameters {
 			params.Set(k, v)
 		}
-
-		/*
-			for k, vals := range event.MultiValueQueryStringParameters {
-				params[k] = vals
-			}
-		*/
-
+		
 		rawQuery = params.Encode()
 	}
-
-	// https://docs.aws.amazon.com/apigateway/latest/developerguide/set-up-lambda-proxy-integrations.html
-	// If you specify values for both headers and multiValueHeaders, API Gateway V1 merges them into a single list.
-	// If the same key-value pair is specified in both, only the values from multiValueHeaders will appear
-	// in the merged list.
+	
 	headers := make(http.Header)
+	
 	for k, v := range event.Headers {
 		headers.Set(k, v)
 	}
 
-	/*
-		for k, vals := range event.MultiValueHeaders {
-			headers[http.CanonicalHeaderKey(k)] = vals
-		}
-	*/
-
 	unescapedPath, err := url.PathUnescape(event.RawPath)
+	
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +100,9 @@ func newHTTPRequest(ctx context.Context, event events.LambdaFunctionURLRequest) 
 	}
 
 	// Handle base64 encoded body.
+	
 	var body io.Reader = strings.NewReader(event.Body)
+	
 	if event.IsBase64Encoded {
 		body = base64.NewDecoder(base64.StdEncoding, body)
 	}
@@ -120,7 +110,9 @@ func newHTTPRequest(ctx context.Context, event events.LambdaFunctionURLRequest) 
 	req_context := event.RequestContext
 
 	// Create a new request.
+	
 	r, err := http.NewRequestWithContext(ctx, req_context.HTTP.Method, u.String(), body)
+	
 	if err != nil {
 		return nil, err
 	}
