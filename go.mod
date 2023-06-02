@@ -7,4 +7,4 @@ require (
 	github.com/akrylysov/algnhsa v1.0.0
 )
 
-require github.com/aws/aws-lambda-go v1.37.0 // indirect
+require github.com/aws/aws-lambda-go v1.37.0
