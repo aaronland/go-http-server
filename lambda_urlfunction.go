@@ -1,5 +1,7 @@
 package server
 
+// https://github.com/aws/aws-lambda-go/blob/main/events/README_Lambda.md
+
 import (
 	"context"
 	"encoding/base64"
