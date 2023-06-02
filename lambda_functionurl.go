@@ -18,38 +18,38 @@ import (
 
 func init() {
 	ctx := context.Background()
-	RegisterServer(ctx, "urlfunction", NewLambdaURLFunctionServer)
+	RegisterServer(ctx, "functionurl", NewLambdaFunctionURLServer)
 }
 
-// LambdaURLFunctionServer implements the `Server` interface for a use in a AWS LambdaURLFunction + API Gateway context.
-type LambdaURLFunctionServer struct {
+// LambdaFunctionURLServer implements the `Server` interface for a use in a AWS LambdaFunctionURL + API Gateway context.
+type LambdaFunctionURLServer struct {
 	Server
 	handler http.Handler
 }
 
-// NewLambdaURLFunctionServer returns a new `LambdaURLFunctionServer` instance configured by 'uri' which is
+// NewLambdaFunctionURLServer returns a new `LambdaFunctionURLServer` instance configured by 'uri' which is
 // expected to be defined in the form of:
 //
-//	urlfunction://
-func NewLambdaURLFunctionServer(ctx context.Context, uri string) (Server, error) {
+//	functionurl://
+func NewLambdaFunctionURLServer(ctx context.Context, uri string) (Server, error) {
 
-	server := LambdaURLFunctionServer{}
+	server := LambdaFunctionURLServer{}
 	return &server, nil
 }
 
 // Address returns the fully-qualified URL used to instantiate 's'.
-func (s *LambdaURLFunctionServer) Address() string {
-	return "urlfunction://"
+func (s *LambdaFunctionURLServer) Address() string {
+	return "functionurl://"
 }
 
 // ListenAndServe starts the serve and listens for requests using 'mux' for routing.
-func (s *LambdaURLFunctionServer) ListenAndServe(ctx context.Context, mux http.Handler) error {
+func (s *LambdaFunctionURLServer) ListenAndServe(ctx context.Context, mux http.Handler) error {
 	s.handler = mux
 	lambda.Start(s.handleRequest)
 	return nil
 }
 
-func (s *LambdaURLFunctionServer) handleRequest(ctx context.Context, request events.LambdaFunctionURLRequest) (events.LambdaFunctionURLResponse, error) {
+func (s *LambdaFunctionURLServer) handleRequest(ctx context.Context, request events.LambdaFunctionURLRequest) (events.LambdaFunctionURLResponse, error) {
 
 	req, err := newHTTPRequest(ctx, request)
 

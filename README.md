@@ -102,6 +102,10 @@ func (s *HTTPServer) ListenAndServe(ctx context.Context, mux *http.ServeMux) err
 
 The following schemes/implementations are included by default with this package.
 
+### functionurl://
+
+An AWS Lambda Function URL compatible HTTP server.
+
 ### http://{HOST}
 
 A standard, plain-vanilla, HTTP server.
@@ -121,10 +125,6 @@ A thin wrapper to invoke the [mkcert](https://github.com/FiloSottile/mkcert) too
 ### tls://{HOST}?cert={TLS_CERTIFICATE}&key={TLS_KEY}
 
 A standard, plain-vanilla, HTTPS/TLS server. You must provide TLS certificate and key files.
-
-### urlfunction://
-
-An AWS Lambda URL Function compatible HTTP server.
 
 ## See also
 

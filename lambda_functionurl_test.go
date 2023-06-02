@@ -5,17 +5,17 @@ import (
 	"testing"
 )
 
-func TestLambdaURLFunctionServer(t *testing.T) {
+func TestLambdaFunctionURLServer(t *testing.T) {
 
 	ctx := context.Background()
 
-	s, err := NewServer(ctx, "urlfunction://")
+	s, err := NewServer(ctx, "functionurl://")
 
 	if err != nil {
 		t.Fatalf("Failed to create new server, %v", err)
 	}
 
-	if s.Address() != "urlfunction://" {
+	if s.Address() != "functionurl://" {
 		t.Fatalf("Unexpected address: %s", s.Address())
 	}
 }
