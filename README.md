@@ -112,7 +112,7 @@ This is an alias to the `tls://` scheme.
 
 ### lambda://
 
-An AWS-compatible HTTP server.
+An AWS Lambda function + API Gateway compatible HTTP server.
 
 ### mkcert://{HOST}
 
@@ -121,6 +121,10 @@ A thin wrapper to invoke the [mkcert](https://github.com/FiloSottile/mkcert) too
 ### tls://{HOST}?cert={TLS_CERTIFICATE}&key={TLS_KEY}
 
 A standard, plain-vanilla, HTTPS/TLS server. You must provide TLS certificate and key files.
+
+### urlfunction://
+
+An AWS Lambda URL Function compatible HTTP server.
 
 ## See also
 

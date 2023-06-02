@@ -3,7 +3,7 @@ package server
 import (
 	"context"
 	"encoding/base64"
-	_ "fmt"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -56,13 +56,15 @@ func (s *LambdaURLFunctionServer) handleRequest(ctx context.Context, request eve
 	}
 
 	rec := httptest.NewRecorder()
-
 	s.handler.ServeHTTP(rec, req)
-
+	
 	rsp := rec.Result()
 
 	return events.LambdaFunctionURLResponse{Body: rec.Body.String(), StatusCode: rsp.StatusCode}, nil
 }
+
+// This was clone and modified as necessary from https://github.com/akrylysov/algnhsa/blob/master/request.go#L30
+// so there may still be issues.
 
 func newHTTPRequest(ctx context.Context, event events.LambdaFunctionURLRequest) (*http.Request, error) {
 
@@ -109,18 +111,13 @@ func newHTTPRequest(ctx context.Context, event events.LambdaFunctionURLRequest) 
 
 	req_context := event.RequestContext
 
-	// Create a new request.
-	
 	r, err := http.NewRequestWithContext(ctx, req_context.HTTP.Method, u.String(), body)
 	
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Failed to create new HTTP request, %w", err)
 	}
 
-	// Set remote IP address.
 	r.RemoteAddr = req_context.HTTP.SourceIP
-
-	// Set request URI
 	r.RequestURI = u.RequestURI()
 
 	r.Header = headers
