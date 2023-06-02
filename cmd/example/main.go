@@ -2,11 +2,11 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"log"
 	"net/http"
 
+	"github.com/sfomuseum/go-flags/flagset"
 	"github.com/aaronland/go-http-server"
 )
 
@@ -24,16 +24,26 @@ func NewHandler() http.Handler {
 
 func main() {
 
-	server_uri := flag.String("server-uri", "http://localhost:8080", "A valid aaronland/go-http-server URI.")
+	var server_uri string
 
-	flag.Parse()
+	fs := flagset.NewFlagSet("server")
 
-	ctx := context.Background()
+	fs.StringVar(&server_uri, "server-uri", "http://localhost:8080", "A valid aaronland/go-http-server URI.")
 
-	s, err := server.NewServer(ctx, *server_uri)
+	flagset.Parse(fs)
+
+	err := flagset.SetFlagsFromEnvVars(fs, "AARONLAND")
 
 	if err != nil {
-		log.Fatalf("Unable to create server (%s), %v", *server_uri, err)
+		log.Fatalf("Failed to set flags from environment variables, %v", err)
+	}
+	
+	ctx := context.Background()
+
+	s, err := server.NewServer(ctx, server_uri)
+
+	if err != nil {
+		log.Fatalf("Unable to create server (%s), %v", server_uri, err)
 	}
 
 	mux := http.NewServeMux()
