@@ -11,7 +11,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
-
+	
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 )
@@ -25,15 +25,36 @@ func init() {
 type LambdaFunctionURLServer struct {
 	Server
 	handler http.Handler
+	binaryContentTypes map[string]bool
 }
 
 // NewLambdaFunctionURLServer returns a new `LambdaFunctionURLServer` instance configured by 'uri' which is
 // expected to be defined in the form of:
 //
-//	functionurl://
+//	functionurl://?{PARAMETERS}
+//
+// Valid parameters are:
+// * `binary_type={MIMETYPE}` One or more mimetypes to be served by AWS FunctionURLs as binary content types.
 func NewLambdaFunctionURLServer(ctx context.Context, uri string) (Server, error) {
+	
+	u, err := url.Parse(uri)
 
-	server := LambdaFunctionURLServer{}
+	if err != nil {
+		return nil, fmt.Errorf("Failed to parse URI, %w", err)
+	}
+
+	q := u.Query()
+
+	binary_types := make(map[string]bool)
+		
+	for _, t := range q["binary_type"] {
+		binary_types[t] = true
+	}
+	
+	server := LambdaFunctionURLServer{
+		binaryContentTypes: binary_types,
+	}
+	
 	return &server, nil
 }
 
@@ -68,7 +89,21 @@ func (s *LambdaFunctionURLServer) handleRequest(ctx context.Context, request eve
 		event_rsp_headers[k] = strings.Join(v, ",")
 	}
 
-	return events.LambdaFunctionURLResponse{Body: rec.Body.String(), StatusCode: rsp.StatusCode, Headers: event_rsp_headers}, nil
+	event_rsp := events.LambdaFunctionURLResponse{
+		StatusCode: rsp.StatusCode,
+		Headers: event_rsp_headers,
+	}
+
+	content_type := rsp.Header.Get("Content-Type")
+
+	if s.binaryContentTypes[content_type] {
+		event_rsp.Body = base64.StdEncoding.EncodeToString(rec.Body.Bytes())
+		event_rsp.IsBase64Encoded = true
+	} else {
+		event_rsp.Body = rec.Body.String()
+	}
+	
+	return event_rsp, nil
 }
 
 // This was clone and modified as necessary from https://github.com/akrylysov/algnhsa/blob/master/request.go#L30
