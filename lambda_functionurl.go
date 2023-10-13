@@ -59,14 +59,22 @@ func (s *LambdaFunctionURLServer) handleRequest(ctx context.Context, request eve
 
 	rec := httptest.NewRecorder()
 	s.handler.ServeHTTP(rec, req)
-	
+
 	rsp := rec.Result()
 
-	return events.LambdaFunctionURLResponse{Body: rec.Body.String(), StatusCode: rsp.StatusCode}, nil
+	event_rsp_headers := make(map[string]string)
+
+	for k, v := range rsp.Header {
+		event_rsp_headers[k] = strings.Join(v, ",")
+	}
+
+	return events.LambdaFunctionURLResponse{Body: rec.Body.String(), StatusCode: rsp.StatusCode, Headers: event_rsp_headers}, nil
 }
 
 // This was clone and modified as necessary from https://github.com/akrylysov/algnhsa/blob/master/request.go#L30
 // so there may still be issues.
+
+// https://docs.aws.amazon.com/lambda/latest/dg/urls-invocation.html
 
 func newHTTPRequest(ctx context.Context, event events.LambdaFunctionURLRequest) (*http.Request, error) {
 
@@ -76,24 +84,24 @@ func newHTTPRequest(ctx context.Context, event events.LambdaFunctionURLRequest) 
 	rawQuery := event.RawQueryString
 
 	if len(rawQuery) == 0 {
-		
+
 		params := url.Values{}
-		
+
 		for k, v := range event.QueryStringParameters {
 			params.Set(k, v)
 		}
-		
+
 		rawQuery = params.Encode()
 	}
-	
+
 	headers := make(http.Header)
-	
+
 	for k, v := range event.Headers {
 		headers.Set(k, v)
 	}
 
 	unescapedPath, err := url.PathUnescape(event.RawPath)
-	
+
 	if err != nil {
 		return nil, err
 	}
@@ -104,9 +112,9 @@ func newHTTPRequest(ctx context.Context, event events.LambdaFunctionURLRequest) 
 	}
 
 	// Handle base64 encoded body.
-	
+
 	var body io.Reader = strings.NewReader(event.Body)
-	
+
 	if event.IsBase64Encoded {
 		body = base64.NewDecoder(base64.StdEncoding, body)
 	}
@@ -114,7 +122,7 @@ func newHTTPRequest(ctx context.Context, event events.LambdaFunctionURLRequest) 
 	req_context := event.RequestContext
 
 	r, err := http.NewRequestWithContext(ctx, req_context.HTTP.Method, u.String(), body)
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("Failed to create new HTTP request, %w", err)
 	}
@@ -123,6 +131,5 @@ func newHTTPRequest(ctx context.Context, event events.LambdaFunctionURLRequest) 
 	r.RequestURI = u.RequestURI()
 
 	r.Header = headers
-
 	return r, nil
 }
