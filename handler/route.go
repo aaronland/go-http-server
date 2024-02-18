@@ -13,18 +13,31 @@ import (
 	"sync"
 )
 
+// Regular expression to match "{label}" style substitutions in URL patterns
 var re_braces = regexp.MustCompile(`\{([^\}]+)\}`)
+
+// Regular expression to match Go 1.22 "[METHOD] [HOST]/[PATH]" URL definitions. This is probably
+// not as robust as it could be.
 var re_route = regexp.MustCompile(`^(?:(?:(GET|POST|PUT|HEAD|OPTION|DELETE)\s)?([^\/]+)?)?(.*)$`)
 
+// Regular expression to replace "{label}" style strings with "([^\/]+)".
 func not_a_slash(s string) string {
 	return fmt.Sprintf(`([^\/]+)`)
 }
 
+// Local cache of wildcard regular expressions that have been derived from patterns with "{label}" style substitutions
 var wildcard_matches = make(map[string]*regexp.Regexp)
 
+// Local struct for return key value pairs that have been derived from URL with "{label}" style substitutions
+// and their subsequent wildcard matches
 type pathValue struct {
 	Key   string
 	Value string
+}
+
+// String returns the key and value pair in a pathValue as a "key=value" formatted string.
+func (pv *pathValue) String() string {
+	return fmt.Sprintf("%s=%s", pv.Key, pv.Value)
 }
 
 // RouteHandlerFunc returns an `http.Handler` instance.
@@ -67,6 +80,14 @@ func RouteHandler(handlers map[string]RouteHandlerFunc) (http.Handler, error) {
 //     implementation that have more handlers than you need or want to initiate, but never use, for every request.
 //  2. You don't want to refactor in to (n) atomic Lambda functions. That is you want to be able to re-use the same
 //     code in both a plain-vanilla HTTP server configuration as well as Lambda + API Gateway configuration.
+//
+// URL patterns for handlers (passed in the `RouteHandlerOptions` struct) are parsed using a custom implementation
+// of Go 1.22's "URL pattern matching". While this implementation has been tested on common patterns it is likely that
+// there are still edge-cases, or simply sufficiently sophisticated cases, that will not match. This is considered a
+// "known known" and those cases will need to be addressed as they arise. This custom implementation uses regular
+// expressions and has not been benchmarked against the Go 1.22 implementation. I would prefer to use the native
+// implementation but it is a) code that is private to [net/http] and sufficiently involved that cloning it in to this
+// package, and then tracking the changes, seems like a bad idea.
 func RouteHandlerWithOptions(opts *RouteHandlerOptions) (http.Handler, error) {
 
 	matches := new(sync.Map)
@@ -85,7 +106,7 @@ func RouteHandlerWithOptions(opts *RouteHandlerOptions) (http.Handler, error) {
 
 	fn := func(rsp http.ResponseWriter, req *http.Request) {
 
-		handler, path_values, err := deriveHandler(req, opts.Handlers, matches, patterns)
+		derive_rsp, err := deriveHandler(req, opts.Handlers, matches, patterns)
 
 		if err != nil {
 			opts.Logger.Printf("%v", err)
@@ -93,31 +114,46 @@ func RouteHandlerWithOptions(opts *RouteHandlerOptions) (http.Handler, error) {
 			return
 		}
 
-		if handler == nil {
+		if derive_rsp == nil {
 			http.Error(rsp, "Not found", http.StatusNotFound)
 			return
 		}
 
-		if path_values != nil {
+		if derive_rsp.Method != "" && derive_rsp.Method != req.Method {
+			http.Error(rsp, "Method not allow", http.StatusMethodNotAllowed)
+			return
+		}
 
-			for _, pv := range path_values {
+		if derive_rsp.Host != "" && derive_rsp.Host != req.Host {
+			http.Error(rsp, "Not found", http.StatusNotFound)
+			return
+		}
+
+		if derive_rsp.PathValues != nil {
+
+			for _, pv := range derive_rsp.PathValues {
 				req.SetPathValue(pv.Key, pv.Value)
 			}
 		}
 
-		handler.ServeHTTP(rsp, req)
+		derive_rsp.Handler.ServeHTTP(rsp, req)
 		return
 	}
 
 	return http.HandlerFunc(fn), nil
 }
 
-func deriveHandler(req *http.Request, handlers map[string]RouteHandlerFunc, matches *sync.Map, patterns []string) (http.Handler, []*pathValue, error) {
+type deriveHandlerResults struct {
+	MatchingPattern string
+	Handler         http.Handler
+	Method          string
+	Host            string
+	PathValues      []*pathValue
+}
+
+func deriveHandler(req *http.Request, handlers map[string]RouteHandlerFunc, matches *sync.Map, patterns []string) (*deriveHandlerResults, error) {
 
 	ctx := req.Context()
-
-	// method := req.Method
-	// host := req.URL.Host
 	path := req.URL.Path
 
 	// Basically do what the default http.ServeMux does but inflate the
@@ -131,6 +167,9 @@ func deriveHandler(req *http.Request, handlers map[string]RouteHandlerFunc, matc
 	// https://cs.opensource.google/go/go/+/refs/tags/go1.22.0:src/net/http/server.go;l=2320
 
 	var matching_pattern string
+	var host string
+	var method string
+
 	var path_values []*pathValue
 
 	for _, p := range patterns {
@@ -152,16 +191,20 @@ func deriveHandler(req *http.Request, handlers map[string]RouteHandlerFunc, matc
 			continue
 		}
 
-		// Something something something check method and host here
+		method = route_m[1]
+		host = route_m[2]
+		route_path := route_m[3]
 
-		// In the meantime just the path for wildcards
-
-		route_path := route_m[len(route_m)-1]
-
-		// Are there any curly-substitution braces?
+		// slog.Info("ROUTE", "path", route_path)
 
 		if !re_braces.MatchString(route_path) {
-			continue
+
+			if strings.HasPrefix(path, route_path) {
+				matching_pattern = p
+				break
+			} else {
+				continue
+			}
 		}
 
 		// If there are replace them with a match-up-to-next-forward-slash capture
@@ -175,7 +218,7 @@ func deriveHandler(req *http.Request, handlers map[string]RouteHandlerFunc, matc
 			re, err := regexp.Compile(str_wildcard)
 
 			if err != nil {
-				return nil, nil, fmt.Errorf("Failed to compile wildcard regexp, %w", err)
+				return nil, fmt.Errorf("Failed to compile wildcard regexp, %w", err)
 			}
 
 			re_wildcard = re
@@ -216,10 +259,10 @@ func deriveHandler(req *http.Request, handlers map[string]RouteHandlerFunc, matc
 	}
 
 	if matching_pattern == "" {
-		return nil, nil, nil
+		return nil, nil
 	}
 
-	// slog.Info("ROUTE", "path", path, "matching_pattern", matching_pattern)
+	// slog.Info("ROUTE", "path", path, "matching_pattern", matching_pattern, "pv", path_values)
 
 	var handler http.Handler
 
@@ -234,18 +277,26 @@ func deriveHandler(req *http.Request, handlers map[string]RouteHandlerFunc, matc
 		// Don't fill up the matches cache with 404 handlers
 
 		if !ok {
-			return nil, nil, nil
+			return nil, nil
 		}
 
 		h, err := handler_func(ctx)
 
 		if err != nil {
-			return nil, nil, fmt.Errorf("Failed to instantiate handler func for '%s' matching '%s', %v", path, matching_pattern, err)
+			return nil, fmt.Errorf("Failed to instantiate handler func for '%s' matching '%s', %v", path, matching_pattern, err)
 		}
 
 		handler = h
 		matches.Store(matching_pattern, handler)
 	}
 
-	return handler, path_values, nil
+	rsp := &deriveHandlerResults{
+		MatchingPattern: matching_pattern,
+		Handler:         handler,
+		PathValues:      path_values,
+		Method:          method,
+		Host:            host,
+	}
+
+	return rsp, nil
 }
