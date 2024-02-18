@@ -5,11 +5,25 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"net/http"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
 )
+
+var re_braces = regexp.MustCompile(`\{([^\}]+)\}`)
+var re_route = regexp.MustCompile(`^(?:(?:(GET|POST|PUT|HEAD|OPTION|DELETE)\s)?([^\/]+)?)?(.*)$`)
+
+func not_a_slash(s string) string {
+	return fmt.Sprintf(`([^\/]+)`)
+}
+
+type pathValue struct {
+	Key   string
+	Value string
+}
 
 // RouteHandlerFunc returns an `http.Handler` instance.
 type RouteHandlerFunc func(context.Context) (http.Handler, error)
@@ -69,7 +83,7 @@ func RouteHandlerWithOptions(opts *RouteHandlerOptions) (http.Handler, error) {
 
 	fn := func(rsp http.ResponseWriter, req *http.Request) {
 
-		handler, err := deriveHandler(req, opts.Handlers, matches, patterns)
+		handler, path_values, err := deriveHandler(req, opts.Handlers, matches, patterns)
 
 		if err != nil {
 			opts.Logger.Printf("%v", err)
@@ -82,6 +96,13 @@ func RouteHandlerWithOptions(opts *RouteHandlerOptions) (http.Handler, error) {
 			return
 		}
 
+		if path_values != nil {
+
+			for _, pv := range path_values {
+				req.SetPathValue(pv.Key, pv.Value)
+			}
+		}
+
 		handler.ServeHTTP(rsp, req)
 		return
 	}
@@ -89,9 +110,12 @@ func RouteHandlerWithOptions(opts *RouteHandlerOptions) (http.Handler, error) {
 	return http.HandlerFunc(fn), nil
 }
 
-func deriveHandler(req *http.Request, handlers map[string]RouteHandlerFunc, matches *sync.Map, patterns []string) (http.Handler, error) {
+func deriveHandler(req *http.Request, handlers map[string]RouteHandlerFunc, matches *sync.Map, patterns []string) (http.Handler, []*pathValue, error) {
 
 	ctx := req.Context()
+
+	// method := req.Method
+	// host := req.URL.Host
 	path := req.URL.Path
 
 	// Basically do what the default http.ServeMux does but inflate the
@@ -99,16 +123,60 @@ func deriveHandler(req *http.Request, handlers map[string]RouteHandlerFunc, matc
 	// https://cs.opensource.google/go/go/+/refs/tags/go1.20.4:src/net/http/server.go;l=2363
 
 	var matching_pattern string
+	var path_values []*pathValue
 
 	for _, p := range patterns {
+
 		if strings.HasPrefix(path, p) {
 			matching_pattern = p
 			break
 		}
+
+		route_m := re_route.FindStringSubmatch(p)
+
+		if len(route_m) == 0 {
+			continue
+		}
+
+		route_path := route_m[len(route_m)-1]
+
+		if !re_braces.MatchString(route_path) {
+			continue
+		}
+
+		str_wildcard := re_braces.ReplaceAllStringFunc(route_path, not_a_slash)
+		re_wildcard := regexp.MustCompile(str_wildcard)
+
+		path_m := re_wildcard.FindStringSubmatch(path)
+
+		if len(path_m) == 0 {
+			continue
+		}
+
+		key_m := re_braces.FindAllStringSubmatch(route_path, -1)
+
+		count_k := len(key_m)
+		path_values = make([]*pathValue, count_k)
+
+		for i := 0; i < count_k; i++ {
+			key := key_m[i][1]
+			value := path_m[i+1]
+
+			pv := &pathValue{
+				Key:   key,
+				Value: value,
+			}
+
+			path_values[i] = pv
+		}
+
+		matching_pattern = p
 	}
 
+	slog.Info("MATCH", "matching pattern", matching_pattern)
+
 	if matching_pattern == "" {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	var handler http.Handler
@@ -124,18 +192,18 @@ func deriveHandler(req *http.Request, handlers map[string]RouteHandlerFunc, matc
 		// Don't fill up the matches cache with 404 handlers
 
 		if !ok {
-			return nil, nil
+			return nil, nil, nil
 		}
 
 		h, err := handler_func(ctx)
 
 		if err != nil {
-			return nil, fmt.Errorf("Failed to instantiate handler func for '%s' matching '%s', %v", path, matching_pattern, err)
+			return nil, nil, fmt.Errorf("Failed to instantiate handler func for '%s' matching '%s', %v", path, matching_pattern, err)
 		}
 
 		handler = h
 		matches.Store(matching_pattern, handler)
 	}
 
-	return handler, nil
+	return handler, path_values, nil
 }
