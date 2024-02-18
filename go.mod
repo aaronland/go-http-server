@@ -1,6 +1,6 @@
 module github.com/aaronland/go-http-server
 
-go 1.18
+go 1.22
 
 require (
 	github.com/aaronland/go-roster v1.0.0
