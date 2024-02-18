@@ -2,7 +2,7 @@ package handler
 
 import (
 	"context"
-	_ "fmt"
+	"fmt"
 	"io"
 	"net/http"
 	"testing"
@@ -13,6 +13,27 @@ import (
 func TestRouteHandler(t *testing.T) {
 
 	ctx := context.Background()
+
+	pv_func := func(ctx context.Context) (http.Handler, error) {
+
+		fn := func(rsp http.ResponseWriter, req *http.Request) {
+			rsp.Write([]byte(req.PathValue("id")))
+			return
+		}
+
+		return http.HandlerFunc(fn), nil
+	}
+
+	pv2_func := func(ctx context.Context) (http.Handler, error) {
+
+		fn := func(rsp http.ResponseWriter, req *http.Request) {
+			body := fmt.Sprintf("%s %s", req.PathValue("hello"), req.PathValue("world"))
+			rsp.Write([]byte(body))
+			return
+		}
+
+		return http.HandlerFunc(fn), nil
+	}
 
 	foo_func := func(ctx context.Context) (http.Handler, error) {
 
@@ -35,8 +56,11 @@ func TestRouteHandler(t *testing.T) {
 	}
 
 	handlers := map[string]RouteHandlerFunc{
-		"/foo":     foo_func,
-		"/foo/bar": bar_func,
+		"/foo":                     foo_func,
+		"/foo/bar":                 bar_func,
+		"/id/{id}":                 pv_func,
+		"/id/{id}/sub":             pv_func,
+		"/{hello}/omg/wtf/{world}": pv2_func,
 	}
 
 	route_handler, err := RouteHandler(handlers)
@@ -59,9 +83,12 @@ func TestRouteHandler(t *testing.T) {
 	}()
 
 	tests := map[string]string{
-		"http://localhost:8080/foo":     "foo",
-		"http://localhost:8080/foo/":    "foo",
-		"http://localhost:8080/foo/bar": "bar",
+		"http://localhost:8080/foo":                 "foo",
+		"http://localhost:8080/foo/":                "foo",
+		"http://localhost:8080/foo/bar":             "bar",
+		"http://localhost:8080/id/1234":             "1234",
+		"http://localhost:8080/id/5678/sub":         "5678",
+		"http://localhost:8080/horse/omg/wtf/email": "horse email",
 	}
 
 	for uri, expected := range tests {

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"log/slog"
+	_ "log/slog"
 	"net/http"
 	"regexp"
 	"sort"
@@ -19,6 +19,8 @@ var re_route = regexp.MustCompile(`^(?:(?:(GET|POST|PUT|HEAD|OPTION|DELETE)\s)?(
 func not_a_slash(s string) string {
 	return fmt.Sprintf(`([^\/]+)`)
 }
+
+var wildcard_matches = make(map[string]*regexp.Regexp)
 
 type pathValue struct {
 	Key   string
@@ -122,15 +124,22 @@ func deriveHandler(req *http.Request, handlers map[string]RouteHandlerFunc, matc
 	// handler (func) on demand at run-time. Handler is cached above.
 	// https://cs.opensource.google/go/go/+/refs/tags/go1.20.4:src/net/http/server.go;l=2363
 
+	// That was before Go 1.22 's pattern routing which makes everything more complicated
+	// https://cs.opensource.google/go/go/+/refs/tags/go1.22.0:src/net/http/server.go;l=2320
+
 	var matching_pattern string
 	var path_values []*pathValue
 
 	for _, p := range patterns {
 
+		// First just try the simple prefix-based approach
+
 		if strings.HasPrefix(path, p) {
 			matching_pattern = p
 			break
 		}
+
+		// Next try to parse out [METHOD] [HOST]/[PATH]
 
 		route_m := re_route.FindStringSubmatch(p)
 
@@ -138,14 +147,37 @@ func deriveHandler(req *http.Request, handlers map[string]RouteHandlerFunc, matc
 			continue
 		}
 
+		// Something something something check method and host here
+
+		// In the meantime just the path for wildcards
+
 		route_path := route_m[len(route_m)-1]
+
+		// Are there any curly-substitution braces?
 
 		if !re_braces.MatchString(route_path) {
 			continue
 		}
 
-		str_wildcard := re_braces.ReplaceAllStringFunc(route_path, not_a_slash)
-		re_wildcard := regexp.MustCompile(str_wildcard)
+		// If there are replace them with a match-up-to-next-forward-slash capture
+		// and then use the result to build a new regular expression
+
+		re_wildcard, exists := wildcard_matches[route_path]
+
+		if !exists {
+
+			str_wildcard := re_braces.ReplaceAllStringFunc(route_path, not_a_slash)
+			re, err := regexp.Compile(str_wildcard)
+
+			if err != nil {
+				return nil, nil, fmt.Errorf("Failed to compile wildcard regexp, %w", err)
+			}
+
+			re_wildcard = re
+			wildcard_matches[route_path] = re_wildcard
+		}
+
+		// Does the current path (like the actual request being processed) match the wildcard?
 
 		path_m := re_wildcard.FindStringSubmatch(path)
 
@@ -153,12 +185,16 @@ func deriveHandler(req *http.Request, handlers map[string]RouteHandlerFunc, matc
 			continue
 		}
 
+		// If it does extract all the curly-substitution braces and then use the two matches
+		// to build a set of key,value pairs to populate the request's PathValue lookup table
+
 		key_m := re_braces.FindAllStringSubmatch(route_path, -1)
 
 		count_k := len(key_m)
 		path_values = make([]*pathValue, count_k)
 
 		for i := 0; i < count_k; i++ {
+
 			key := key_m[i][1]
 			value := path_m[i+1]
 
@@ -172,8 +208,6 @@ func deriveHandler(req *http.Request, handlers map[string]RouteHandlerFunc, matc
 
 		matching_pattern = p
 	}
-
-	slog.Info("MATCH", "matching pattern", matching_pattern)
 
 	if matching_pattern == "" {
 		return nil, nil, nil
