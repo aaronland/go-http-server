@@ -6,8 +6,8 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/sfomuseum/go-flags/flagset"
 	"github.com/aaronland/go-http-server"
+	"github.com/sfomuseum/go-flags/flagset"
 )
 
 func NewHandler() http.Handler {
@@ -37,7 +37,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to set flags from environment variables, %v", err)
 	}
-	
+
 	ctx := context.Background()
 
 	s, err := server.NewServer(ctx, server_uri)

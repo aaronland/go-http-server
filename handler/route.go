@@ -124,13 +124,18 @@ func deriveHandler(req *http.Request, handlers map[string]RouteHandlerFunc, matc
 	// handler (func) on demand at run-time. Handler is cached above.
 	// https://cs.opensource.google/go/go/+/refs/tags/go1.20.4:src/net/http/server.go;l=2363
 
-	// That was before Go 1.22 's pattern routing which makes everything more complicated
+	// That was before Go 1.22 's pattern routing which makes everything more complicated. What
+	// follows is less complicated (or at least less twisty) than the net/http code which is all
+	// private and internal and too much to clone in to this package. What follows may still contain
+	// gotchas.
 	// https://cs.opensource.google/go/go/+/refs/tags/go1.22.0:src/net/http/server.go;l=2320
 
 	var matching_pattern string
 	var path_values []*pathValue
 
 	for _, p := range patterns {
+
+		// slog.Info("ROUTE", "pattern", p)
 
 		// First just try the simple prefix-based approach
 
@@ -207,11 +212,14 @@ func deriveHandler(req *http.Request, handlers map[string]RouteHandlerFunc, matc
 		}
 
 		matching_pattern = p
+		break
 	}
 
 	if matching_pattern == "" {
 		return nil, nil, nil
 	}
+
+	// slog.Info("ROUTE", "path", path, "matching_pattern", matching_pattern)
 
 	var handler http.Handler
 
