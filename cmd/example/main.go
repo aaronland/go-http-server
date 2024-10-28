@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/aaronland/go-http-server"
+	"github.com/aaronland/go-http-server/handler"
 	"github.com/sfomuseum/go-flags/flagset"
 )
 
@@ -25,10 +26,12 @@ func NewHandler() http.Handler {
 func main() {
 
 	var server_uri string
+	var disabled bool
 
 	fs := flagset.NewFlagSet("server")
 
 	fs.StringVar(&server_uri, "server-uri", "http://localhost:8080", "A valid aaronland/go-http-server URI.")
+	fs.BoolVar(&disabled, "disabled", false, "If true, return a 503 Service unavailable error for all requests.")
 
 	flagset.Parse(fs)
 
@@ -47,9 +50,10 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	handler := NewHandler()
+	index_handler := NewHandler()
+	index_handler = handler.DisabledHandler(disabled, index_handler)
 
-	mux.Handle("/", handler)
+	mux.Handle("/", index_handler)
 
 	log.Printf("Listening on %s", s.Address())
 
