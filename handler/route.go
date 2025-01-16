@@ -3,9 +3,7 @@ package handler
 import (
 	"context"
 	"fmt"
-	"io"
-	"log"
-	_ "log/slog"
+	"log/slog"
 	"net/http"
 	"regexp"
 	"sort"
@@ -51,20 +49,13 @@ type RouteHandlerOptions struct {
 	// Handlers is a map whose keys are `http.ServeMux` style routing patterns and whose keys
 	// are functions that when invoked return `http.Handler` instances.
 	Handlers map[string]RouteHandlerFunc
-	// Logger is a `log.Logger` instance used for feedback and error-reporting.
-	Logger *log.Logger
 }
 
-// RouteHandler create a new `http.Handler` instance that will serve requests using handlers defined in 'handlers'
-// with a `log.Logger` instance that discards all writes. Under the hood this is invoking the `RouteHandlerWithOptions`
-// method.
+// RouteHandler create a new `http.Handler` instance that will serve requests using handlers defined in 'handlers'.
 func RouteHandler(handlers map[string]RouteHandlerFunc) (http.Handler, error) {
-
-	logger := log.New(io.Discard, "", 0)
 
 	opts := &RouteHandlerOptions{
 		Handlers: handlers,
-		Logger:   logger,
 	}
 
 	return RouteHandlerWithOptions(opts)
@@ -108,25 +99,31 @@ func RouteHandlerWithOptions(opts *RouteHandlerOptions) (http.Handler, error) {
 
 	fn := func(rsp http.ResponseWriter, req *http.Request) {
 
+		logger := slog.Default()
+		logger = logger.With("path", req.URL.Path)
+
 		derive_rsp, err := deriveHandler(req, opts.Handlers, matches, patterns)
 
 		if err != nil {
-			opts.Logger.Printf("%v", err)
+			logger.Error("Failed to derive handler", "error", err)
 			http.Error(rsp, "Internal server error", http.StatusInternalServerError)
 			return
 		}
 
 		if derive_rsp == nil {
+			logger.Debug("Route handler not found")
 			http.Error(rsp, "Not found", http.StatusNotFound)
 			return
 		}
 
 		if derive_rsp.Method != "" && derive_rsp.Method != req.Method {
+			logger.Debug("Invalid method for route handler", "method", req.Method, "require", derive_rsp.Method)
 			http.Error(rsp, "Method not allow", http.StatusMethodNotAllowed)
 			return
 		}
 
 		if derive_rsp.Host != "" && derive_rsp.Host != req.Host {
+			logger.Debug("Invalid host for route handler", "host", req.Host, "require", derive_rsp.Host)
 			http.Error(rsp, "Not found", http.StatusNotFound)
 			return
 		}
@@ -138,6 +135,7 @@ func RouteHandlerWithOptions(opts *RouteHandlerOptions) (http.Handler, error) {
 			}
 		}
 
+		logger.Debug("Server handler", "handler", fmt.Sprintf("%T", derive_rsp))
 		derive_rsp.Handler.ServeHTTP(rsp, req)
 		return
 	}
