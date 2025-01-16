@@ -6,8 +6,8 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/aaronland/go-http-server"
-	"github.com/aaronland/go-http-server/handler"
+	"github.com/aaronland/go-http-server/v2"
+	"github.com/aaronland/go-http-server/v2/handler"
 	"github.com/sfomuseum/go-flags/flagset"
 )
 

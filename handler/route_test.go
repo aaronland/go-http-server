@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/aaronland/go-http-server"
+	"github.com/aaronland/go-http-server/v2"
 )
 
 func TestRouteHandler(t *testing.T) {
