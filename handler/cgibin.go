@@ -95,6 +95,7 @@ func CgiBinHandler(opts *CgiBinHandlerOptions) (http.Handler, error) {
 			"REQUEST_METHOD="+req.Method,
 			"SCRIPT_FILENAME="+script_path,
 			"QUERY_STRING="+req.URL.RawQuery,
+			"SERVER_PROTOCOL=HTTP/1.0",
 		)
 
 		if contentLength := req.ContentLength; contentLength >= 0 {
