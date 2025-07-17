@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
@@ -13,12 +14,17 @@ import (
 )
 
 type CgiBinHandlerOptions struct {
-	Root    *os.Root
-	URI     string
+	Root    fs.FS
 	Timeout time.Duration
 }
 
 func CgiBinHandler(opts *CgiBinHandlerOptions) (http.Handler, error) {
+
+	tmpdir, err := os.MkdirTemp("", "cgi-bin")
+
+	if err != nil {
+		return nil, err
+	}
 
 	fn := func(rsp http.ResponseWriter, req *http.Request) {
 
@@ -33,18 +39,52 @@ func CgiBinHandler(opts *CgiBinHandlerOptions) (http.Handler, error) {
 			return
 		}
 
-		script_path := filepath.Base(req.URL.Path)
+		t1 := time.Now()
 
-		script_info, err := opts.Root.Stat(script_path)
+		defer func(){
+			logger.Info("Time to execute script", "time", time.Since(t1))
+		}()
+		
+		script_name := filepath.Base(req.URL.Path)
+		script_path := filepath.Join(tmpdir, script_name)
+
+		logger = logger.With("script", script_path)
+		
+		_, err := os.Stat(script_path)
 
 		if err != nil {
-			http.Error(rsp, "Script not found or not executable", http.StatusNotFound)
-			return
-		}
 
-		if !script_info.Mode().IsRegular() {
-			http.Error(rsp, "Script not found or not executable", http.StatusNotFound)
-			return
+			logger.Info("Write script to temp dir")
+			
+			script_r, err := opts.Root.Open(script_name)
+
+			if err != nil {
+				http.Error(rsp, "Script not found or not executable", http.StatusNotFound)
+				return
+			}
+
+			defer script_r.Close()
+
+			script_wr, err := os.OpenFile(script_path, os.O_RDWR|os.O_CREATE, 0755)
+
+			if err != nil {
+				http.Error(rsp, "Internal server error", http.StatusInternalServerError)
+				return
+			}
+
+			_, err = io.Copy(script_wr, script_r)
+
+			if err != nil {
+				http.Error(rsp, "Internal server error", http.StatusInternalServerError)
+				return
+			}
+
+			err = script_wr.Close()
+
+			if err != nil {
+				http.Error(rsp, "Internal server error", http.StatusInternalServerError)
+				return
+			}
 		}
 
 		ctx, cancel := context.WithTimeout(req.Context(), opts.Timeout)
