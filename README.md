@@ -4,6 +4,10 @@ Go package to provide interfaces and implementation for HTTP servers.
 
 It is mostly a syntactic wrapper around existing HTTP server implementation with a common interface configured using a URI-based syntax.
 
+## Deprecation notice
+
+This package has been deprecated and will no longer be updated. It has been replaced by the [aaronland/go-http](https://github.com/aaronland/go-http) package.
+
 ## Documentation
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/aaronland/go-http-server.svg)](https://pkg.go.dev/github.com/aaronland/go-http-server)
